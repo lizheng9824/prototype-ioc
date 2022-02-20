@@ -1,29 +1,32 @@
-variable "user_pool_name" {}
-variable "env" {}
-variable "system_name" {
-  default="terraform-lambda-deployment"
+provider "aws" {
+  region = "ap-northeast-1"
+  profile = "default"
 }
 
-data "archive_file" "layer_zip" {
-    type = "zip"
-    source_dir = "build/layer"
-    output_path = "lambda/layer.zip"
+terraform {
+  required_providers {
+    aws = {
+      source = "hashicorp/aws"
+      version = "4.0.0"
+    }
+  }
+
+  backend "s3" {
+    bucket = "prototype-ioc-terraform"
+    region = "ap-northeast-1"
+    key = "terraform-lambda.tfstate"
+    encrypt = true
+  }
 }
 
 data "archive_file" "function_zip" {
   type = "zip"
-  source_dir = "build/function"
-  output_path = "lambda/function.zip"
-}
-
-resource "aws_lambda_layer_version" "lambda_layer" {
-  layer_name = "${system_name}_lambda_layer"
-  filename = data.archive_file.layer_zip.output_path
-  source_code_hash = data.archive_file.layer_zip.output_base64sha256
+  source_dir = "../../app/lambda"
+  output_path = "../../build/function.zip"
 }
 
 resource "aws_iam_role" "iam_for_lambda" {
-  name = "${var.user_pool_name}-${var.env}"
+  name = "iam_for_lambda"
   assume_role_policy = jsonencode({
     "Version": "2012-10-17",
     "Statement": {
@@ -38,7 +41,7 @@ resource "aws_iam_role" "iam_for_lambda" {
 }
 
 resource "aws_iam_role_policy" "lambda_access_policy" {
-  name = "${var.system_name}_lambda_access_policy"
+  name = "lambda_access_policy"
   role = aws_iam_role.iam_for_lambda.id
   policy = jsonencode({
       "Version": "2012-10-17",
@@ -56,14 +59,19 @@ resource "aws_iam_role_policy" "lambda_access_policy" {
   })
 }
 
-resource "aws_lambda_function" "get_unixtime" {
-  handler = "get_unixtime.lambda_handler"
-  filename = data.archive_file.function_zip.output_path
+resource "aws_lambda_function" "lambda_sample_function" {
+  function_name = "lambda_sample"
   runtime = "python3.9"
   role = aws_iam_role.iam_for_lambda.arn
-  function_name = "${system_name}-get_unixtime"
-
+  filename = data.archive_file.function_zip.output_path
+  handler = "lambda_sample.handler"
   source_code_hash = data.archive_file.function_zip.output_base64sha256
-  layers = [aws_lambda_layer_version.lambda_layer.arn]
 
+  environment {
+    variables = {
+      BASE_MESSAGE = "Hello"
+    }
+  }
+
+#  depends_on = [aws_iam_role_policy_attachment.lambda_policy, aws_cloudwatch_log_group.lambda_log_group]
 }
