@@ -1,5 +1,6 @@
 import logging
 import os
+import json
 
 logger = logging.getLogger('lambda_logger')
 logger.setLevel(logging.INFO)
@@ -10,7 +11,10 @@ def handler(event, context):
 
     base_message = os.environ['BASE_MESSAGE']
 
-    last_name = event['last_name']
-    first_name = event['first_name']
+    last_name = event.get("queryStringParameters").get("last_name")
+    first_name = event.get("queryStringParameters").get("first_name")
 
-    return { 'message': f'{base_message}, {first_name} {last_name}!!' }
+    return {
+        'statusCode': 200,
+        'body': json.dumps({ 'message': f'{base_message}, {first_name} {last_name}!!' })
+    }
